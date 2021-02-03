@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" ",
-    "start": "node index.js"
+    "start": "node match_service.js"
   },
   "author": "Jerry S Joseph",
   "license": "ISC",
