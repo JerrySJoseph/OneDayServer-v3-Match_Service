@@ -1,4 +1,8 @@
-const {PushRequest}=require('../../_commonUtils/RequestHandler')
+//Importing Required Libraries
+const { v4: uuidv4 } = require('uuid');
+const dbConnection=require('./MatchDatabase');
+const {PushRequest}=require('./RequestHandler')
+
 const paramWeights={
     age:50,
     distance:20,
@@ -6,78 +10,150 @@ const paramWeights={
     verified:10,
     misc:5
 }
+
 const expiretime=1;
- function generateMatch(params,callback) {
-     
-    var models=[];
-   var {_id,dl,al,state,district,gender,interestedIn,age,verified,misc,matchCount}=params;
 
-   PushRequest({exchange:'user',routingKey:'user.event.fetch'},channel,(result)=>{
-       console.log(result);
-   })
+//function to generateMatch              
+function generateMatches(data,channel,onFinish) {
 
-   profileDatabase.collection('user_profiles').find({state:state,gender:interestedIn,interestedIn:gender}).toArray((err,result)=>{
+    let models=[]
+    const matchCount=process.env.MATCH_COUNT;
+    const params={
+                    exchange:'user',
+                    routingKey:'user.event.fetch',
+                    requestID:uuidv4(),
+                    data:JSON.stringify({state:data.state,gender:data.interestedIn,interestedIn:data.gender})
+                    }
+
+    //Fetch Users in same state with same sex interests
+    PushRequest(params,channel,(result)=>{
+
+            if(result.length>matchCount)
+                result=result.filter(item=>data.district===item.district)
+            const mylat=(data.mylat)
+            const mylon=(data.mylon)
+            result.forEach((item,index)=>{
+                ageDiff=getAgeFromtimestamp(data.age)-getAgeFromtimestamp(item.dob)
+                
+                const d=calcdistance(mylat,mylon,item.latitude,item.longitude,"K");
+                models.push({
+                    _id:item._id,
+                    index:index,
+                    locked:true,
+                    distance:d,
+                    roomId:"roomId",
+                    name:item.name,
+                    nickname:item.nickName,
+                    district:item.district,
+                    state:item.state,
+                    age:getAgeFromtimestamp(item.dob),
+                    bio:item.bio,
+                    school:item.school,
+                    verified:item.verified,
+                    interests:item.interests,
+                    gender:item.gender,
+                    portfolio:item.portfolio,
+                    score:getScore(data.dl,data.al,d,ageDiff,(data.school==item.school),item.verified,true)})
+            })
     
-    if(result.length>matchCount)
-        result=result.filter(item=>district===item.district)
-    shuffleArray(result)
-    const mylat=parseFloat(params.mylat)
-    const mylon=parseFloat(params.mylon)
+            models=models.sort((a,b)=>b.score-a.score).slice(0,matchCount);
     
-    result.forEach((item,index)=>{
-        ageDiff=getAgeFromtimestamp(age)-getAgeFromtimestamp(item.dob)
-        const d=calcdistance(mylat,mylon,item.latitude,item.longitude,"K");
-        models.push({
-            _id:item._id,
-            index:index,
-            locked:true,
-            distance:d,
-            roomId:"roomId",
-            name:item.name,
-            nickname:item.nickName,
-            district:item.district,
-            state:item.state,
-            age:getAgeFromtimestamp(item.dob),
-            bio:item.bio,
-            school:item.school,
-            verified:item.verified,
-            interests:item.interests,
-            gender:item.gender,
-            portfolio:item.portfolio,
-            score:getScore(dl,al,d,ageDiff,(school===item.school),item.verified,true)})
-    })
-    models=models.sort((a,b)=>b.score-a.score).slice(0,matchCount);
-    const writeObj={
-        _id:_id,
-        matches:models,
-        expiresat:(new Date() + (1000*60*60*24*expiretime)),
-    }
-    matchDatabase.collection('match_data').updateOne({_id:_id},{$set:writeObj},{upsert:true},(err,writeResult)=>{
-        if(err)
-        {console.log(err)
-        callback({
-            success:false,
-            msg:"MATCH files write error"
-        })}
-        else
-       callback({
-          success:true,
-          samearea:result.length,
-          matchCount:models.length,
-          result:models
-      })
-    })
-     
-    
-    
-        
-       });    
+            const match_data={
+                                _id:data._id,
+                                requestID:params.requestID,
+                                requestat:Date.now(),
+                                expiresat:(Date.now()+(1000*60*60*24)),
+                                matchCount:models.length,
+                                result:models
+                            };
+            
+            //Writing to Database
+            dbConnection.matchDatabase.collection('match_data').updateOne({_id:data._id},{$set:match_data},{upsert:true},(err,result)=>{
+                 if(err)
+                    {
+                        
+                        console.log(err)
+                        onFinish({
+                            success:false,
+                            msg:"MATCH files write error"
+                        })
+                    }
+                    else
+                    {
+                       
+                        onFinish({
+                        success:true,
+                         requestID:params.requestID,
+                         requestat:Date.now(),
+                         expiresat:(Date.now()+(1000*60*60*24)),
+                        matchCount:models.length,
+                        result:models
+                    })
+                    }
+                    
+            })
+                            
+        })
 }
-function shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
+//Function as a promise to check if the expire time is elapsed or not
+function checkIfallowed(data)
+{
+    return new Promise((resolve,reject)=>{
+        dbConnection.matchDatabase.collection('match_data').findOne({_id:data._id},(error,result)=>{
+        if(error)
+            return reject({
+                success:false,
+                message:`Unknown Server Error`
+            })
+        if(!result)
+            return resolve();
+        if(result.expiresat>(new Date()).getTime())
+        {
+            let millisLeft=result.expiresat-(new Date()).getTime();
+            let symbol='seconds';
+            millisLeft=millisLeft/1000;
+            if(millisLeft>60)
+               {
+                 millisLeft=millisLeft/60;
+                symbol='minutes'
+               } 
+            if(millisLeft>60);
+                {
+                 millisLeft=millisLeft/60;
+                symbol='hours'
+               } 
+           return reject({
+                success:false,
+                timeleft:result.expiresat-(new Date()).getTime(),
+                message:`You cannot have next match for next ${Math.round(millisLeft)} ${symbol}`
+            })
+            
+        }
+        else 
+           return resolve();
+
+    })
+    })
+}
+function fetchMatchesFor(id)
+{
+    return new Promise((resolve,reject)=>{
+        dbConnection.matchDatabase.collection('match_data').findOne({_id:id},(error,result)=>{
+        if(error)
+            return reject({
+                success:false,
+                message:`Unknown Server Error`
+            })
+        if(!result)
+            return reject({
+                success:false,
+                message:`No saved matches found`
+            })
+        else 
+           return resolve(result);
+
+        })
+    })
 }
 function getScore(dl,al,distance,ageDiff,school,verified,misc)
 {
@@ -88,19 +164,11 @@ function getScore(dl,al,distance,ageDiff,school,verified,misc)
      score+=misc?paramWeights.misc:0;
     return score;
 }
+
 function getAgeFromtimestamp(timestamp) {
     return ((new Date()).getTime() - timestamp) / (1000 * 60 * 60 * 24 * 365);
 }
-//:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-//:::                                                                         :::
-//:::  Passed to function:                                                    :::
-//:::    lat1, lon1 = Latitude and Longitude of point 1 (in decimal degrees)  :::
-//:::    lat2, lon2 = Latitude and Longitude of point 2 (in decimal degrees)  :::
-//:::    unit = the unit you desire for results                               :::
-//:::           where: 'M' is statute miles (default)                         :::
-//:::                  'K' is kilometers                                      :::
-//:::                  'N' is nautical miles                                  :::
-//:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
 function calcdistance(lat1, lon1, lat2, lon2, unit) {
     if ((lat1 == lat2) && (lon1 == lon2)) {
         return 0;
@@ -122,5 +190,7 @@ function calcdistance(lat1, lon1, lat2, lon2, unit) {
         return dist;
     }
 }
-module.exports={generateMatch}
 
+module.exports={
+    checkIfallowed,generateMatches,fetchMatchesFor
+}
