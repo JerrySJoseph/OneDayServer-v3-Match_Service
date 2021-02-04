@@ -53,7 +53,6 @@ function RegisterQueueEvents()
                     checkIfallowed(data).then(()=>{
                         generateMatches(data,channel,onFinish)
                     }).catch((response)=>{
-                        console.log(response)
                         onFinish(response)
                     })
                     
