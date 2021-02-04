@@ -67,7 +67,7 @@ function RegisterQueueEvents()
      
 }
 
-async function generateMatches(data,channel,onFinish) {
+function generateMatches(data,channel,onFinish) {
 
     let models=[]
     const matchCount=process.env.MATCH_COUNT;
@@ -157,10 +157,23 @@ function checkIfallowed(data)
             return resolve();
         if(result.expiresat>(new Date()).getTime())
         {
+            let millisLeft=result.expiresat-(new Date()).getTime();
+            let symbol='seconds';
+            millisLeft=millisLeft/1000/1000;
+            if(millisLeft>60)
+               {
+                millisLeft/60;
+                symbol='minutes'
+               } 
+            if(millisLeft>60);
+                {
+                millisLeft/60;
+                symbol='hours'
+               } 
            return reject({
                 success:false,
-                timeleft:'some time',
-                message:`You cannot have next match until`
+                timeleft:millisLeft,
+                message:`You cannot have next match for next ${millisLeft} ${symbol}`
             })
             
         }
