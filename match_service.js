@@ -1,13 +1,12 @@
 //Importing Required Libraries
 const mongoose=require('mongoose');
 const { v4: uuidv4 } = require('uuid');
+
 //Custom Components and Helpers
 const log=require('./Utils/log');
 const Queue= require('./Utils/RMQConnection')
 const dbConnection=require('./Utils/MatchDatabase');
 const {PullRequest,PushRequest}=require('./Utils/RequestHandler')
-
-//CI INtegrations
 
 const paramWeights={
     age:50,
@@ -16,7 +15,9 @@ const paramWeights={
     verified:10,
     misc:5
 }
+
 const expiretime=1;
+
 //Initialize Profile Service System
 InitSystem();
 
@@ -36,16 +37,9 @@ if(error)
         log.info('Connected to Database')
         //Register Events after Database Connection
         RegisterQueueEvents();
-})
-  /*  mongoose.connect('mongodb://localhost:27017/one_day_matches_db',
-    {useNewUrlParser:true,useUnifiedTopology:true},
-    (error)=>{
-        
-               
-    })*/
+    })
 
 }
-
 
 //Registering Pull Requests for Queues
 function RegisterQueueEvents()
@@ -54,9 +48,15 @@ function RegisterQueueEvents()
          connection.createChannel((err,channel)=>{
             
                PullRequest({exchange:'match',routingKey:'match.event.generate'},channel,(data,onFinish)=>{
-                    generateMatches(data,channel,onFinish)
-                     
-                   
+
+                    //Check expiration
+                    checkIfallowed(data).then(()=>{
+                        generateMatches(data,channel,onFinish)
+                    }).catch((response)=>{
+                        console.log(response)
+                        onFinish(response)
+                    })
+                    
                });
     
                 log.info('Events Registered')  
@@ -67,7 +67,8 @@ function RegisterQueueEvents()
      
 }
 
-function generateMatches(data,channel,onFinish) {
+async function generateMatches(data,channel,onFinish) {
+
     let models=[]
     const matchCount=process.env.MATCH_COUNT;
     const params={
@@ -82,10 +83,8 @@ function generateMatches(data,channel,onFinish) {
 
             if(result.length>matchCount)
                 result=result.filter(item=>data.district===item.district)
-          //  shuffleArray(result)
             const mylat=(data.mylat)
             const mylon=(data.mylon)
-        //   return onFinish(result);
             result.forEach((item,index)=>{
                 ageDiff=getAgeFromtimestamp(data.age)-getAgeFromtimestamp(item.dob)
                 
@@ -109,7 +108,9 @@ function generateMatches(data,channel,onFinish) {
                     portfolio:item.portfolio,
                     score:getScore(data.dl,data.al,d,ageDiff,(data.school==item.school),item.verified,true)})
             })
+    
             models=models.sort((a,b)=>b.score-a.score).slice(0,matchCount);
+    
             const match_data={
                                 _id:data._id,
                                 requestID:params.requestID,
@@ -118,13 +119,17 @@ function generateMatches(data,channel,onFinish) {
                                 matchCount:models.length,
                                 result:models
                             };
+            
+            //Writing to Database
             dbConnection.matchDatabase.collection('match_data').updateOne({_id:data._id},{$set:match_data},{upsert:true},(err,result)=>{
                  if(err)
-                    {console.log(err)
-                    onFinish({
-                        success:false,
-                        msg:"MATCH files write error"
-                    })}
+                    {
+                        console.log(err)
+                        onFinish({
+                            success:false,
+                            msg:"MATCH files write error"
+                        })
+                    }
                     else
                     onFinish({
                         success:true,
@@ -136,16 +141,36 @@ function generateMatches(data,channel,onFinish) {
                     })
             })
                             
-                        })
+        })
+}
+//Function as a promise to check if the expire time is elapsed or not
+function checkIfallowed(data)
+{
+    return new Promise((resolve,reject)=>{
+        dbConnection.matchDatabase.collection('match_data').findOne({_id:data._id},(error,result)=>{
+        if(error)
+            return reject({
+                success:false,
+                message:`Unknown Server Error`
+            })
+        if(!result)
+            return resolve();
+        if(result.expiresat>(new Date()).getTime())
+        {
+           return reject({
+                success:false,
+                timeleft:'some time',
+                message:`You cannot have next match until`
+            })
+            
+        }
+        else 
+           return resolve();
+
+    })
+    })
 }
 
-
-function shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
-}
 function getScore(dl,al,distance,ageDiff,school,verified,misc)
 {
     var  score=paramWeights.distance*(1-(distance/dl))
@@ -155,19 +180,11 @@ function getScore(dl,al,distance,ageDiff,school,verified,misc)
      score+=misc?paramWeights.misc:0;
     return score;
 }
+
 function getAgeFromtimestamp(timestamp) {
     return ((new Date()).getTime() - timestamp) / (1000 * 60 * 60 * 24 * 365);
 }
-//:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-//:::                                                                         :::
-//:::  Passed to function:                                                    :::
-//:::    lat1, lon1 = Latitude and Longitude of point 1 (in decimal degrees)  :::
-//:::    lat2, lon2 = Latitude and Longitude of point 2 (in decimal degrees)  :::
-//:::    unit = the unit you desire for results                               :::
-//:::           where: 'M' is statute miles (default)                         :::
-//:::                  'K' is kilometers                                      :::
-//:::                  'N' is nautical miles                                  :::
-//:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
 function calcdistance(lat1, lon1, lat2, lon2, unit) {
     if ((lat1 == lat2) && (lon1 == lon2)) {
         return 0;
