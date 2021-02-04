@@ -172,8 +172,8 @@ function checkIfallowed(data)
                } 
            return reject({
                 success:false,
-                timeleft:millisLeft,
-                message:`You cannot have next match for next ${millisLeft} ${symbol}`
+                timeleft:result.expiresat-(new Date()).getTime(),
+                message:`You cannot have next match for next ${Math.round(millisLeft)} ${symbol}`
             })
             
         }
