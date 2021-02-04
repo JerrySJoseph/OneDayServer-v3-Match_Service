@@ -159,15 +159,15 @@ function checkIfallowed(data)
         {
             let millisLeft=result.expiresat-(new Date()).getTime();
             let symbol='seconds';
-            millisLeft=millisLeft/1000/1000;
+            millisLeft=millisLeft/1000;
             if(millisLeft>60)
                {
-                millisLeft/60;
+                 millisLeft=millisLeft/60;
                 symbol='minutes'
                } 
             if(millisLeft>60);
                 {
-                millisLeft/60;
+                 millisLeft=millisLeft/60;
                 symbol='hours'
                } 
            return reject({
