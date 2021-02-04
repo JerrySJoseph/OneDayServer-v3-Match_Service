@@ -2,9 +2,10 @@ const log=require('./log');
 
 async function PushRequest(params,channel,callback)
 {
-  channel.assertExchange(params.exchange,'topic',{durable:false});
+  try {
+    channel.assertExchange(params.exchange,'topic',{durable:false});
 /************************** Establishing QUEUE*********************** */
-        channel.assertQueue('',{autoDelete:true},(error3,q)=>{
+        channel.assertQueue(params.routingKey+'_rpc',{autoDelete:true},(error3,q)=>{
             if(error3)
                return callback(error3)
             console.info(`Waiting for Response in Que [${q.queue}]`)
@@ -23,19 +24,26 @@ async function PushRequest(params,channel,callback)
             })
 
             //******************** PUBLISHER EVENT **************************/
-            channel.publish(params.exchange,params.routingKey,Buffer.from(params.data.toString()),{ 
+            channel.publish(params.exchange,params.routingKey,Buffer.from(params.data),{ 
               correlationId: params.requestID, 
               replyTo: q.queue 
             })
             
         })
+  } catch (error) {
+    callback({
+      success:false,
+      message:error
+    })
+  }
+  
   
 }
 async function PullRequest(params,channel,onRequest){
-
-  channel.assertExchange(params.exchange,'topic',{durable:false});
+  try {
+    channel.assertExchange(params.exchange,'topic',{durable:false});
  //For Reciever 1
-        channel.assertQueue('',{autoDelete:true},(error3,q)=>{
+        channel.assertQueue(params.routingKey,{autoDelete:true},(error3,q)=>{
             if(error3)
                return console.error(error3)
             let consumertag=null;
@@ -58,6 +66,11 @@ async function PullRequest(params,channel,onRequest){
             })
             
         })
+  } catch (error) {
+    console.log(error);
+  }
+
+  
   
 }
 module.exports={
