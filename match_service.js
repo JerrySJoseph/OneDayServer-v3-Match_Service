@@ -34,6 +34,8 @@ function RegisterQueueEvents()
 {
     Queue.getMyConnection.then((connection)=>{
          connection.createChannel((err,channel)=>{
+             if(err)
+                return log.error(err);
 
                 //Pull all requests for generating matches
                 PullRequest({exchange:'match',routingKey:'match.event.generate'},channel,(data,onFinish)=>{

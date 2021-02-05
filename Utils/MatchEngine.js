@@ -70,8 +70,7 @@ function generateMatches(data,channel,onFinish) {
             //Writing to Database
             dbConnection.matchDatabase.collection('match_data').updateOne({_id:data._id},{$set:match_data},{upsert:true},(err,result)=>{
                  if(err)
-                    {
-                        
+                    {                        
                         console.log(err)
                         onFinish({
                             success:false,
@@ -80,16 +79,11 @@ function generateMatches(data,channel,onFinish) {
                     }
                     else
                     {
-                        //TODO: Send a request to Chat service to create a record of ConnectionRequests for matches
-                        /*
-                            PushRequest('chat','chat.event.connectRequest',callback)
-                        */
-                       
                         onFinish({
                         success:true,
-                         requestID:params.requestID,
-                         requestat:Date.now(),
-                         expiresat:(Date.now()+(1000*60*60*24)),
+                        requestID:params.requestID,
+                        requestat:Date.now(),
+                        expiresat:(Date.now()+(1000*60*60*24)),
                         matchCount:models.length,
                         result:models
                     })
