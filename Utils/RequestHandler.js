@@ -5,7 +5,7 @@ async function PushRequest(params,channel,callback)
   try {
     channel.assertExchange(params.exchange,'topic',{durable:false});
 /************************** Establishing QUEUE*********************** */
-        channel.assertQueue(params.routingKey+'_rpc',{autoDelete:true},(error3,q)=>{
+        channel.assertQueue(params.routingKey+'_rpc',{durable:true},(error3,q)=>{
             if(error3)
                return callback(error3)
             console.info(`Waiting for Response in Que [${q.queue}]`)
@@ -43,7 +43,7 @@ async function PullRequest(params,channel,onRequest){
   try {
     channel.assertExchange(params.exchange,'topic',{durable:false});
  //For Reciever 1
-        channel.assertQueue(params.routingKey,{autoDelete:true},(error3,q)=>{
+        channel.assertQueue(params.routingKey,{durable:true},(error3,q)=>{
             if(error3)
                return console.error(error3)
             let consumertag=null;

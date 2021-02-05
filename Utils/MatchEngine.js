@@ -57,12 +57,12 @@ function generateMatches(data,channel,onFinish) {
             })
     
             models=models.sort((a,b)=>b.score-a.score).slice(0,matchCount);
-    
+            const timestampNow=Date.now();
             const match_data={
                                 _id:data._id,
                                 requestID:params.requestID,
-                                requestat:Date.now(),
-                                expiresat:(Date.now()+(1000*60*60*24)),
+                                requestat:timestampNow,
+                                expiresat:(timestampNow+(1000*60*60*24)),
                                 matchCount:models.length,
                                 result:models
                             };
@@ -80,6 +80,10 @@ function generateMatches(data,channel,onFinish) {
                     }
                     else
                     {
+                        //TODO: Send a request to Chat service to create a record of ConnectionRequests for matches
+                        /*
+                            PushRequest('chat','chat.event.connectRequest',callback)
+                        */
                        
                         onFinish({
                         success:true,
