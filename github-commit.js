@@ -28,5 +28,4 @@ const commit = (n) => {
   });
 };
 
-const removeCommit = (n) => {};
 commit(500);
