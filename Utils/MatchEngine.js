@@ -12,10 +12,25 @@ const paramWeights={
 }
 
 const expiretime=1;
+connectToUser({_id:"123"})
+function connectToUser(data)
+{
+    return new Promise((resolve,reject1)=>{
+        fetchMatchesFor(data._id).then((response)=>{
+            reject1();
+            
+        }).catch((err)=>{
+            return reject({
+                success:false,
+                message:err
+            })
+        })
+      })
+}
 
 //function to generateMatch              
 function generateMatches(data,channel,onFinish) {
-
+   
     let models=[]
     const matchCount=process.env.MATCH_COUNT;
     const params={
@@ -95,8 +110,7 @@ function generateMatches(data,channel,onFinish) {
 }
 //Function as a promise to check if the expire time is elapsed or not
 function checkIfallowed(data)
-{
-    return new Promise((resolve,reject)=>{
+{ return new Promise((resolve,reject)=>{
         dbConnection.matchDatabase.collection('match_data').findOne({_id:data._id},(error,result)=>{
         if(error)
             return reject({
@@ -153,6 +167,7 @@ function fetchMatchesFor(id)
         })
     })
 }
+
 function getScore(dl,al,distance,ageDiff,school,verified,misc)
 {
     var  score=paramWeights.distance*(1-(distance/dl))
